@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ทบทวนคำศัพท์ภาษาจีน</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Canvas Confetti สำหรับเอฟเฟกต์ฉลอง -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Prompt', sans-serif;
+            background-color: #fff0f6; /* พื้นหลังสีชมพูอ่อนมาก */
+            /* ลายจุด (Polka dot) น่ารักๆ */
+            background-image: radial-gradient(#fbcfe8 1.5px, transparent 1.5px);
+            background-size: 24px 24px;
+        }
+        /* ปรับแต่ง scrollbar ให้เข้ากับธีม */
+        .custom-scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: #f9a8d4 transparent;
+            -webkit-overflow-scrolling: touch;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #f9a8d4;
+            border-radius: 10px;
+        }
+        /* เงาสีชมพูอ่อนสำหรับกล่องหลัก */
+        .cute-shadow {
+            box-shadow: 0 10px 25px -5px rgba(244, 114, 182, 0.2), 0 8px 10px -6px rgba(244, 114, 182, 0.1);
+        }
+        /* แอนิเมชันสำหรับตัวมาสคอต */
+        @keyframes popUpMascot {
+            0% { transform: translateY(100px) scale(0.5); opacity: 0; }
+            50% { transform: translateY(-10px) scale(1.1); opacity: 1; }
+            100% { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        @keyframes floatUpDown {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+        .mascot-popup {
+            animation: popUpMascot 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards, floatUpDown 2s ease-in-out infinite 0.5s;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // ข้อมูลตั้งต้นจากรูปภาพที่อัปโหลด
+        const defaultVocabText = `今天, jīntiān, today
+昨天, zuótiān, yesterday
+星期, xīngqī, week
+星期一, Xīngqīyī, Monday
+星期二, Xīngqī'èr, Tuesday
+星期三, Xīngqīsān, Wednesday
+星期四, Xīngqīsì, Thursday
+星期五, Xīngqīwǔ, Friday
+星期六, Xīngqīliù, Saturday
+星期天, Xīngqītiān, Sunday
+几, jǐ, how many; what; several
+二, èr, two
+三, sān, three
+四, sì, four
+哪儿, nǎr, where
+那儿, nàr, there
+我, wǒ, I; me
+回, huí, to come/go back (to)
+学校, xuéxiào, school
+再见, zàijiàn, goodbye
+对不起, duìbuqǐ, I'm sorry; to be sorry
+没关系, méi guānxi, it doesn't matter; that's all right`;
+
+        const fieldLabels = {
+            hanzi: 'อักษรจีน (Hanzi)',
+            pinyin: 'พินอิน (Pinyin)',
+            meaning: 'คำแปล (Meaning)'
+        };
+
+        const App = () => {
+            const [mode, setMode] = useState('setup'); // setup, quiz, result
+            const [inputText, setInputText] = useState(defaultVocabText);
+            const [vocabList, setVocabList] = useState([]);
+            
+            const [displaySettings, setDisplaySettings] = useState({
+                hanzi: true,
+                pinyin: false,
+                meaning: false
+            });
+            
+            // โหมดการตอบ: system = พิมพ์ในระบบ, paper = เขียนกระดาษ
+            const [answerMode, setAnswerMode] = useState('system'); 
+            
+            // ลำดับคำศัพท์: สุ่ม (true) หรือ เรียงตามเดิม (false)
+            const [isRandomize, setIsRandomize] = useState(true);
+
+            // Quiz State
+            const [currentIndex, setCurrentIndex] = useState(0);
+            const [userAnswersList, setUserAnswersList] = useState([]); 
+            const [resultsList, setResultsList] = useState([]); 
+            const [paperChecks, setPaperChecks] = useState([]); 
+
+            // Timer States
+            const [timerMode, setTimerMode] = useState('none'); 
+            const [timeLimitMinutes, setTimeLimitMinutes] = useState(5); 
+            const [currentTime, setCurrentTime] = useState(0); 
+
+            // Mascot States
+            const [mascotMessage, setMascotMessage] = useState(null);
+            
+            const encouragements = [
+                { emoji: '🐰', text: 'สู้ๆ น้าาา คนเก่ง! ✨' },
+                { emoji: '🐱', text: 'ทำได้ดีมากเลย เมี้ยว~ 💖' },
+                { emoji: '🐻', text: 'ค่อยๆ คิดน้า ไม่ต้องรีบ 🧸' },
+                { emoji: '🐥', text: 'เก่งสุดๆ ไปเลย ปิ๊บๆ! 🌟' },
+                { emoji: '🎀', text: 'ลุยเลยยยย เต็มที่! 🌸' },
+                { emoji: '🐶', text: 'โฮ่งๆ! ยอดเยี่ยมมากก 🦴' },
+                { emoji: '🐹', text: 'ใกล้ความจริงแล้ว ฮึบๆ! 🍡' }
+            ];
+
+            // ฟังก์ชันเรียกตัวมาสคอต
+            const triggerMascot = () => {
+                // โอกาส 40% ที่ตัวการ์ตูนจะโผล่มาให้กำลังใจ
+                if (Math.random() < 0.4) {
+                    const randomMsg = encouragements[Math.floor(Math.random() * encouragements.length)];
+                    setMascotMessage(randomMsg);
+                    setTimeout(() => setMascotMessage(null), 3500); // หายไปหลัง 3.5 วิ
+                }
+            };
+
+            // File Upload Handler
+            const fileInputRef = useRef(null);
+            const handleFileUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    setInputText(event.target.result);
+                };
+                reader.readAsText(file);
+            };
+
+            const toggleDisplaySetting = (field) => {
+                setDisplaySettings(prev => {
+                    const next = { ...prev, [field]: !prev[field] };
+                    const trueCount = Object.values(next).filter(Boolean).length;
+                    
+                    if (trueCount === 0) {
+                        alert('กรุณาเลือกให้แสดงข้อมูลอย่างน้อย 1 อย่างน้า 🥺');
+                        return prev;
+                    }
+                    if (trueCount === 3) {
+                        alert('ถ้าเลือกแสดงทั้งหมดจะไม่มีให้ทายนะคะ รบกวนเว้นไว้ทายอย่างน้อย 1 อย่างน้า ✨');
+                        return prev;
+                    }
+                    return next;
+                });
+            };
+
+            // Timer Effect
+            useEffect(() => {
+                let interval = null;
+                if (mode === 'quiz' && timerMode !== 'none') {
+                    interval = setInterval(() => {
+                        setCurrentTime(prev => {
+                            if (timerMode === 'down') {
+                                if (prev <= 1) {
+                                    clearInterval(interval);
+                                    // หมดเวลา
+                                    setTimeout(() => {
+                                        alert('⏱️ หมดเวลาแล้ว! ระบบกำลังสรุปผลคะแนนให้ค่ะ 🎀');
+                                        handleFinishQuiz();
+                                    }, 100);
+                                    return 0;
+                                }
+                                return prev - 1;
+                            } else {
+                                return prev + 1;
+                            }
+                        });
+                    }, 1000);
+                }
+                return () => clearInterval(interval);
+            }, [mode, timerMode]);
+
+            // Start Practice
+            const startPractice = () => {
+                const lines = inputText.split('\n');
+                const parsedVocab = lines
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0)
+                    .map(line => {
+                        const parts = line.split(/[,	]/).map(p => p.trim());
+                        return {
+                            hanzi: parts[0] || '',
+                            pinyin: parts[1] || '',
+                            meaning: parts[2] || ''
+                        };
+                    })
+                    .filter(v => v.hanzi && v.pinyin && v.meaning);
+
+                if (parsedVocab.length === 0) {
+                    alert('กรุณาใส่คำศัพท์ให้ถูกต้องอย่างน้อย 1 คำน้า (รูปแบบ: จีน, พินอิน, ความหมาย) 🌸');
+                    return;
+                }
+
+                // เตรียม Array สถานะ (สุ่มหรือไม่สุ่มตามที่ตั้งค่าไว้)
+                const finalVocabList = isRandomize ? [...parsedVocab].sort(() => Math.random() - 0.5) : parsedVocab;
+                
+                setVocabList(finalVocabList);
+                setUserAnswersList(finalVocabList.map(() => ({ hanzi: '', pinyin: '', meaning: '' })));
+                setResultsList(finalVocabList.map(() => null)); 
+                setPaperChecks(finalVocabList.map(() => false)); 
+                setCurrentIndex(0);
+                
+                // ตั้งค่าเวลาเริ่มต้น
+                if (timerMode === 'down') {
+                    setCurrentTime(timeLimitMinutes * 60);
+                } else {
+                    setCurrentTime(0);
+                }
+
+                setMode('quiz');
+            };
+
+            const handleAnswerChange = (field, value) => {
+                setUserAnswersList(prev => {
+                    const next = [...prev];
+                    next[currentIndex] = { ...next[currentIndex], [field]: value };
+                    return next;
+                });
+            };
+
+            const checkAnswer = () => {
+                const currentVocab = vocabList[currentIndex];
+                const currentAnswers = userAnswersList[currentIndex];
+                let fullyCorrect = true;
+                const fieldResults = {};
+
+                const compareStr = (str1, str2) => (str1 || '').toLowerCase().trim() === (str2 || '').toLowerCase().trim();
+
+                ['hanzi', 'pinyin', 'meaning'].forEach(key => {
+                    if (!displaySettings[key]) {
+                        const isCorrect = compareStr(currentAnswers[key], currentVocab[key]);
+                        fieldResults[key] = isCorrect;
+                        if (!isCorrect) fullyCorrect = false;
+                    }
+                });
+
+                setResultsList(prev => {
+                    const next = [...prev];
+                    next[currentIndex] = {
+                        fieldResults,
+                        fullyCorrect
+                    };
+                    return next;
+                });
+            };
+
+            const skipQuestion = () => {
+                let nextIdx = -1;
+                for (let i = currentIndex + 1; i < vocabList.length; i++) {
+                    if (resultsList[i] === null) {
+                        nextIdx = i; break;
+                    }
+                }
+                if (nextIdx === -1) {
+                    for (let i = 0; i < currentIndex; i++) {
+                        if (resultsList[i] === null) {
+                            nextIdx = i; break;
+                        }
+                    }
+                }
+                
+                if (nextIdx !== -1) {
+                    setCurrentIndex(nextIdx);
+                } else {
+                    setCurrentIndex(prev => (prev + 1) % vocabList.length);
+                }
+            };
+
+            const retryQuestion = () => {
+                setResultsList(prev => {
+                    const next = [...prev];
+                    next[currentIndex] = null;
+                    return next;
+                });
+            };
+
+            const nextQuestion = () => {
+                setCurrentIndex(prev => (prev + 1) % vocabList.length);
+                triggerMascot(); // เรียกตัวมาสคอตตอนเปลี่ยนข้อ
+            };
+            const prevQuestion = () => setCurrentIndex(prev => (prev - 1 + vocabList.length) % vocabList.length);
+
+            const handleFinishQuiz = () => {
+                setMode('result');
+                setMascotMessage(null); // ซ่อนมาสคอตถ้ากำลังแสดงอยู่
+                
+                // ยิงพลุกระดาษฉลอง (Confetti)
+                if (window.confetti) {
+                    const duration = 3000;
+                    const end = Date.now() + duration;
+
+                    const frame = () => {
+                        window.confetti({
+                            particleCount: 5,
+                            angle: 60,
+                            spread: 55,
+                            origin: { x: 0 },
+                            colors: ['#fbcfe8', '#f9a8d4', '#f472b6', '#ffffff', '#fde047']
+                        });
+                        window.confetti({
+                            particleCount: 5,
+                            angle: 120,
+                            spread: 55,
+                            origin: { x: 1 },
+                            colors: ['#fbcfe8', '#f9a8d4', '#f472b6', '#ffffff', '#fde047']
+                        });
+
+                        if (Date.now() < end) {
+                            requestAnimationFrame(frame);
+                        }
+                    };
+                    frame();
+                }
+            };
+
+            const restart = () => {
+                setMode('setup');
+            };
+
+            const togglePaperCheck = (idx) => {
+                setPaperChecks(prev => {
+                    const next = [...prev];
+                    next[idx] = !next[idx];
+                    return next;
+                });
+            };
+
+            const playAudio = (text, lang = 'zh-CN') => {
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel();
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = lang; 
+                    utterance.rate = 0.85;
+                    window.speechSynthesis.speak(utterance);
+                } else {
+                    alert('ขออภัย เบราว์เซอร์ของคุณไม่รองรับระบบเสียงอ่านค่ะ 😢');
+                }
+            };
+
+            const formatTime = (seconds) => {
+                const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+                const s = (seconds % 60).toString().padStart(2, '0');
+                return `${m}:${s}`;
+            };
+
+            // ---------------- UI Components ----------------
+
+            const renderSetup = () => (
+                <div className="max-w-4xl mx-auto p-5 sm:p-8 bg-white/90 backdrop-blur-sm rounded-3xl sm:rounded-[2rem] cute-shadow mt-4 sm:mt-10 border-[3px] border-pink-100">
+                    <h1 className="text-2xl sm:text-3xl font-extrabold text-center text-pink-500 mb-6 sm:mb-8 flex items-center justify-center gap-2 sm:gap-3">
+                        🎀 <span>ระบบทบทวนคำศัพท์ภาษาจีน</span> 🌸
+                    </h1>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div>
+                            <div className="flex justify-between items-center mb-3">
+                                <label className="block text-pink-800 font-bold text-lg">📝 รายการคำศัพท์</label>
+                                <div>
+                                    <input 
+                                        type="file" 
+                                        accept=".txt,.csv" 
+                                        className="hidden" 
+                                        ref={fileInputRef}
+                                        onChange={handleFileUpload}
+                                    />
+                                    <button 
+                                        onClick={() => fileInputRef.current.click()}
+                                        className="text-sm bg-pink-100 hover:bg-pink-200 text-pink-600 font-semibold py-1.5 px-4 rounded-full transition-colors shadow-sm"
+                                    >
+                                        📂 อัปโหลดไฟล์
+                                    </button>
+                                </div>
+                            </div>
+                            <textarea 
+                                className="w-full h-64 p-4 border-2 border-pink-200 rounded-2xl focus:ring-4 focus:ring-pink-100 focus:border-pink-400 focus:outline-none font-mono text-sm bg-pink-50/30 transition-all text-gray-700"
+                                value={inputText}
+                                onChange={(e) => setInputText(e.target.value)}
+                                placeholder="ตัวอย่าง:\n今天, jīntiān, today\n明天, míngtiān, tomorrow"
+                            ></textarea>
+                            <p className="text-xs text-pink-400 mt-2 font-medium">* ใช้เครื่องหมายจุลภาค (,) คั่นระหว่าง จีน, พินอิน, อังกฤษ</p>
+                        </div>
+
+                        <div className="bg-pink-50/50 p-6 rounded-[1.5rem] flex flex-col justify-center border-2 border-pink-100">
+                            <h2 className="text-xl font-bold text-pink-600 mb-2">⚙️ ตั้งค่าการทบทวน</h2>
+                            <p className="text-gray-600 mb-1 font-medium">เลือกข้อมูลที่คุณต้องการให้ <b>"แสดง"</b></p>
+                            <p className="text-sm text-pink-400 mb-4">* ส่วนที่ไม่ได้เลือกจะเป็นช่องให้พิมพ์ตอบค่ะ</p>
+                            
+                            <div className="space-y-3 mb-8">
+                                {['hanzi', 'pinyin', 'meaning'].map(key => (
+                                    <label key={key} className={`flex items-center p-4 border-2 rounded-2xl cursor-pointer transition-all duration-200 ${displaySettings[key] ? 'bg-pink-100 border-pink-400 shadow-sm' : 'bg-white border-pink-100 hover:bg-pink-50'}`}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={displaySettings[key]} 
+                                            onChange={() => toggleDisplaySetting(key)} 
+                                            className="w-5 h-5 text-pink-500 rounded border-pink-300 focus:ring-pink-400" 
+                                        />
+                                        <span className="ml-3 font-semibold text-gray-700">แสดง{fieldLabels[key]}</span>
+                                    </label>
+                                ))}
+                            </div>
+
+                            <h2 className="text-xl font-bold text-pink-600 mb-2 mt-2">🔀 ลำดับคำศัพท์</h2>
+                            <div className="space-y-3 mb-8">
+                                <label className={`flex items-center p-3 border-2 rounded-2xl cursor-pointer transition-all duration-200 ${!isRandomize ? 'bg-pink-100 border-pink-400 shadow-sm' : 'bg-white border-pink-100 hover:bg-pink-50'}`}>
+                                    <input type="radio" checked={!isRandomize} onChange={() => setIsRandomize(false)} className="w-5 h-5 text-pink-500 focus:ring-pink-400" />
+                                    <span className="ml-3 font-semibold text-gray-700">เรียงตามข้อมูลที่พิมพ์ ⬇️</span>
+                                </label>
+                                <label className={`flex items-center p-3 border-2 rounded-2xl cursor-pointer transition-all duration-200 ${isRandomize ? 'bg-pink-100 border-pink-400 shadow-sm' : 'bg-white border-pink-100 hover:bg-pink-50'}`}>
+                                    <input type="radio" checked={isRandomize} onChange={() => setIsRandomize(true)} className="w-5 h-5 text-pink-500 focus:ring-pink-400" />
+                                    <span className="ml-3 font-semibold text-gray-700">สุ่มลำดับ (Random) 🔀</span>
+                                </label>
+                            </div>
+
+                            <h2 className="text-xl font-bold text-pink-600 mb-2 mt-2">✍️ วิธีการตอบ</h2>
+                            <div className="space-y-3 mb-8">
+                                <label className={`flex items-center p-3 border-2 rounded-2xl cursor-pointer transition-all duration-200 ${answerMode === 'system' ? 'bg-pink-100 border-pink-400 shadow-sm' : 'bg-white border-pink-100 hover:bg-pink-50'}`}>
+                                    <input type="radio" checked={answerMode === 'system'} onChange={() => setAnswerMode('system')} className="w-5 h-5 text-pink-500 focus:ring-pink-400" />
+                                    <span className="ml-3 font-semibold text-gray-700">พิมพ์ตอบในระบบ 💻</span>
+                                </label>
+                                <label className={`flex items-center p-3 border-2 rounded-2xl cursor-pointer transition-all duration-200 ${answerMode === 'paper' ? 'bg-pink-100 border-pink-400 shadow-sm' : 'bg-white border-pink-100 hover:bg-pink-50'}`}>
+                                    <input type="radio" checked={answerMode === 'paper'} onChange={() => setAnswerMode('paper')} className="w-5 h-5 text-pink-500 focus:ring-pink-400" />
+                                    <span className="ml-3 font-semibold text-gray-700">เขียนตอบลงกระดาษ 📝</span>
+                                </label>
+                            </div>
+
+                            <h2 className="text-xl font-bold text-pink-600 mb-2 mt-2">⏱️ ตั้งค่าเวลา</h2>
+                            <div className="space-y-3 mb-8">
+                                <label className={`flex items-center p-3 border-2 rounded-2xl cursor-pointer transition-all duration-200 ${timerMode === 'none' ? 'bg-pink-100 border-pink-400 shadow-sm' : 'bg-white border-pink-100 hover:bg-pink-50'}`}>
+                                    <input type="radio" checked={timerMode === 'none'} onChange={() => setTimerMode('none')} className="w-5 h-5 text-pink-500 focus:ring-pink-400" />
+                                    <span className="ml-3 font-semibold text-gray-700">ชิลๆ ไม่จับเวลา ☕</span>
+                                </label>
+                                <label className={`flex items-center p-3 border-2 rounded-2xl cursor-pointer transition-all duration-200 ${timerMode === 'up' ? 'bg-pink-100 border-pink-400 shadow-sm' : 'bg-white border-pink-100 hover:bg-pink-50'}`}>
+                                    <input type="radio" checked={timerMode === 'up'} onChange={() => setTimerMode('up')} className="w-5 h-5 text-pink-500 focus:ring-pink-400" />
+                                    <span className="ml-3 font-semibold text-gray-700">จับเวลา (นับเดินหน้า) ⏳</span>
+                                </label>
+                                <div className={`border-2 rounded-2xl transition-all duration-200 ${timerMode === 'down' ? 'bg-pink-100 border-pink-400 shadow-sm' : 'bg-white border-pink-100 hover:bg-pink-50'}`}>
+                                    <label className="flex items-center p-3 cursor-pointer">
+                                        <input type="radio" checked={timerMode === 'down'} onChange={() => setTimerMode('down')} className="w-5 h-5 text-pink-500 focus:ring-pink-400" />
+                                        <span className="ml-3 font-semibold text-gray-700">ตั้งเวลา (นับถอยหลัง) ⏰</span>
+                                    </label>
+                                    {timerMode === 'down' && (
+                                        <div className="px-10 pb-4 flex items-center gap-3">
+                                            <input 
+                                                type="number" 
+                                                min="1" 
+                                                max="60" 
+                                                value={timeLimitMinutes} 
+                                                onChange={(e) => setTimeLimitMinutes(Math.max(1, parseInt(e.target.value) || 1))}
+                                                className="w-20 p-2 border-2 border-pink-300 rounded-xl text-center focus:ring-4 focus:ring-pink-100 focus:border-pink-500 focus:outline-none font-bold text-pink-600" 
+                                            />
+                                            <span className="text-gray-600 font-medium">นาที</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <button 
+                                onClick={startPractice}
+                                className="w-full bg-pink-500 hover:bg-pink-600 text-white font-bold py-3 sm:py-4 px-6 rounded-2xl shadow-lg shadow-pink-200 transition-all transform hover:scale-[1.02] hover:-translate-y-1 text-base sm:text-lg"
+                            >
+                                ✨ เริ่มทบทวนคำศัพท์เลย! ✨
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const renderQuiz = () => {
+                const currentVocab = vocabList[currentIndex];
+                const currentAnswers = userAnswersList[currentIndex];
+                const currentResult = resultsList[currentIndex]; 
+
+                const displayFields = ['hanzi', 'pinyin', 'meaning'].filter(k => displaySettings[k]);
+                const questionFields = ['hanzi', 'pinyin', 'meaning'].filter(k => !displaySettings[k]);
+                
+                const isReadyToSubmit = questionFields.every(k => currentAnswers[k].trim() !== '');
+                const answeredCount = resultsList.filter(r => r !== null).length;
+
+                return (
+                    <div className="max-w-2xl mx-auto p-4 sm:p-5 md:p-8 bg-white/90 backdrop-blur-sm rounded-3xl sm:rounded-[2rem] cute-shadow mt-4 sm:mt-8 border-[3px] border-pink-100">
+                        
+                        {/* Question Navigator */}
+                        <div className="mb-4 sm:mb-6">
+                            <div className="flex justify-between items-end mb-3">
+                                <span className="text-xs sm:text-sm font-bold text-pink-600">ข้อที่เท่าไหร่แล้วน้า ↔️</span>
+                                <div className="flex items-center gap-2 sm:gap-4">
+                                    {timerMode !== 'none' && (
+                                        <div className={`text-base sm:text-lg font-bold px-3 sm:px-4 py-1 sm:py-1.5 rounded-xl shadow-sm ${
+                                            timerMode === 'down' && currentTime <= 60 
+                                            ? 'bg-red-100 text-red-600 animate-pulse border border-red-200' 
+                                            : 'bg-pink-100 text-pink-700 border border-pink-200'
+                                        }`}>
+                                            ⏱️ {formatTime(currentTime)}
+                                        </div>
+                                    )}
+                                    <span className="text-[10px] sm:text-xs font-semibold text-gray-500 bg-gray-100 px-2 sm:px-3 py-1 rounded-full">
+                                        {answerMode === 'system' ? `ทำแล้ว ${answeredCount}/${vocabList.length}` : `ข้อที่ ${currentIndex + 1}/${vocabList.length}`}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="flex gap-2 sm:gap-2.5 overflow-x-auto pb-3 sm:pb-4 custom-scrollbar snap-x">
+                                {vocabList.map((_, idx) => {
+                                    const res = resultsList[idx];
+                                    let btnStyle = 'bg-pink-50 text-pink-400 border-2 border-pink-100 hover:bg-pink-100'; 
+                                    
+                                    if (answerMode === 'system' && res) {
+                                        if (res.fullyCorrect) btnStyle = 'bg-emerald-100 text-emerald-700 border-2 border-emerald-300'; 
+                                        else btnStyle = 'bg-rose-100 text-rose-700 border-2 border-rose-300'; 
+                                    }
+                                    
+                                    if (idx === currentIndex) {
+                                        btnStyle = 'bg-pink-500 text-white border-2 border-pink-600 ring-4 ring-pink-200 transform scale-110 shadow-md';
+                                    }
+
+                                    return (
+                                        <button 
+                                            key={idx} 
+                                            onClick={() => setCurrentIndex(idx)} 
+                                            className={`flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-extrabold transition-all snap-center ${btnStyle}`}
+                                            title={answerMode === 'paper' ? `ข้อ ${idx + 1}` : (res ? (res.fullyCorrect ? 'ถูกต้อง' : 'ผิด') : 'ยังไม่ทำ')}
+                                        >
+                                            {idx + 1}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            
+                            {/* Legend */}
+                            {answerMode === 'system' ? (
+                                <div className="flex justify-center gap-3 sm:gap-4 mt-2 text-[10px] sm:text-xs font-semibold text-gray-500 flex-wrap">
+                                    <span className="flex items-center gap-1 sm:gap-1.5"><span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-pink-100 border border-pink-200"></span> ยังไม่ทำ</span>
+                                    <span className="flex items-center gap-1 sm:gap-1.5"><span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-pink-500"></span> ปัจจุบัน</span>
+                                    <span className="flex items-center gap-1 sm:gap-1.5"><span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-emerald-200"></span> ถูก</span>
+                                    <span className="flex items-center gap-1 sm:gap-1.5"><span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-rose-200"></span> ผิด</span>
+                                </div>
+                            ) : (
+                                <div className="flex justify-center gap-3 sm:gap-4 mt-2 text-[10px] sm:text-xs font-semibold text-gray-500 flex-wrap">
+                                    <span className="flex items-center gap-1 sm:gap-1.5"><span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-pink-100 border border-pink-200"></span> ข้ออื่นๆ</span>
+                                    <span className="flex items-center gap-1 sm:gap-1.5"><span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-pink-500"></span> ปัจจุบัน</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Prompt Card */}
+                        <div className="bg-gradient-to-br from-pink-50 to-white py-8 sm:py-10 px-4 sm:px-6 rounded-3xl sm:rounded-[2rem] text-center mb-6 sm:mb-8 border-2 border-pink-100 shadow-inner flex flex-col items-center justify-center relative mt-2 sm:mt-4">
+                            
+                            {/* ปุ่มฟังเสียง */}
+                            <div className="absolute top-3 right-3 sm:top-4 sm:right-4 flex flex-col gap-1.5 sm:gap-2 sm:flex-row">
+                                <button 
+                                    onClick={() => playAudio(currentVocab.hanzi, 'zh-CN')}
+                                    className="text-[10px] sm:text-sm bg-white border-2 border-pink-200 text-pink-500 font-bold hover:bg-pink-50 hover:scale-105 px-2.5 py-1 sm:px-4 sm:py-2 rounded-full shadow-sm transition-all focus:outline-none"
+                                >
+                                    💖 เสียงจีน
+                                </button>
+                                <button 
+                                    onClick={() => playAudio(currentVocab.meaning, 'en-US')}
+                                    className="text-[10px] sm:text-sm bg-white border-2 border-purple-200 text-purple-500 font-bold hover:bg-purple-50 hover:scale-105 px-2.5 py-1 sm:px-4 sm:py-2 rounded-full shadow-sm transition-all focus:outline-none"
+                                >
+                                    ✨ เสียง EN
+                                </button>
+                            </div>
+                            
+                            <div className="space-y-4 sm:space-y-6 w-full mt-6 sm:mt-2">
+                                {displayFields.map(key => (
+                                    <div key={key} className="w-full">
+                                        <span className="text-pink-300 text-xs sm:text-sm font-bold uppercase tracking-widest block mb-1 sm:mb-2">
+                                            {fieldLabels[key]}
+                                        </span>
+                                        <h2 className={`font-black text-gray-800 ${key === 'hanzi' ? 'text-5xl sm:text-6xl drop-shadow-sm' : 'text-3xl sm:text-4xl'}`}>
+                                            {currentVocab[key]}
+                                        </h2>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Input Fields */}
+                        <div className="space-y-5">
+                            {answerMode === 'paper' ? (
+                                <div className="bg-pink-50/80 text-pink-700 p-8 rounded-[1.5rem] text-center font-bold border-2 border-pink-200 text-lg flex flex-col items-center gap-3 shadow-inner">
+                                    <span className="text-5xl drop-shadow-sm mb-2">📝</span>
+                                    <span>โหมดเขียนกระดาษ: <br/><span className="text-pink-500 font-medium">ลองคัดลงในกระดาษของคุณดูนะคะ สู้ๆ! 💖</span></span>
+                                </div>
+                            ) : (
+                                questionFields.map(key => {
+                                    const isCorrect = currentResult ? currentResult.fieldResults[key] : null;
+                                    return (
+                                        <div key={key}>
+                                            <label className="block text-pink-700 font-bold mb-2 ml-2">{fieldLabels[key]}</label>
+                                            <input 
+                                                type="text" 
+                                                className={`w-full p-4 border-2 rounded-2xl focus:outline-none text-xl font-medium transition-all ${
+                                                    currentResult 
+                                                    ? (isCorrect ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-rose-400 bg-rose-50 text-rose-700') 
+                                                    : 'border-pink-200 bg-white focus:border-pink-400 focus:ring-4 focus:ring-pink-100 text-gray-700'
+                                                }`}
+                                                value={currentAnswers[key]}
+                                                onChange={(e) => handleAnswerChange(key, e.target.value)}
+                                                disabled={currentResult !== null} 
+                                                placeholder={`พิมพ์ ${fieldLabels[key]} ตรงนี้เลย...`}
+                                                autoComplete="off"
+                                            />
+                                            {currentResult && !isCorrect && (
+                                                <p className="text-rose-500 mt-2 font-bold ml-2">เฉลย: {currentVocab[key]}</p>
+                                            )}
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="mt-6 sm:mt-10">
+                            {answerMode === 'paper' ? (
+                                <div>
+                                    <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                                        <button 
+                                            onClick={prevQuestion}
+                                            className="w-full sm:w-1/2 bg-white hover:bg-pink-50 text-pink-500 border-2 border-pink-200 font-bold py-3 sm:py-4 px-4 rounded-xl sm:rounded-2xl transition-all shadow-sm text-base sm:text-lg"
+                                        >
+                                            ⬅️ ข้อก่อนหน้า
+                                        </button>
+                                        <button 
+                                            onClick={nextQuestion}
+                                            className="w-full sm:w-1/2 bg-pink-100 hover:bg-pink-200 text-pink-700 font-bold py-3 sm:py-4 px-4 rounded-xl sm:rounded-2xl transition-all shadow-sm text-base sm:text-lg"
+                                        >
+                                            ข้อถัดไป ➡️
+                                        </button>
+                                    </div>
+                                    <hr className="my-6 sm:my-8 border-pink-100 border-[1px] sm:border-[1.5px]" />
+                                    <button 
+                                        onClick={handleFinishQuiz}
+                                        className="w-full font-bold py-3 sm:py-4 px-6 rounded-xl sm:rounded-2xl shadow-lg shadow-emerald-200/50 transition-all text-base sm:text-lg bg-emerald-400 hover:bg-emerald-500 text-white animate-bounce hover:animate-none"
+                                    >
+                                        🏁 ไปดูเฉลยทั้งหมดกันเลย!
+                                    </button>
+                                </div>
+                            ) : !currentResult ? (
+                                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                                    <button 
+                                        onClick={skipQuestion}
+                                        className="w-full sm:w-1/3 bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold py-3 sm:py-4 px-4 rounded-xl sm:rounded-2xl transition-all shadow-sm border-2 border-orange-200 text-base sm:text-lg"
+                                    >
+                                        ⏭️ ข้ามไปก่อน
+                                    </button>
+                                    <button 
+                                        onClick={checkAnswer}
+                                        disabled={!isReadyToSubmit}
+                                        className="w-full sm:w-2/3 bg-pink-500 hover:bg-pink-600 disabled:bg-gray-300 disabled:shadow-none text-white font-bold py-3 sm:py-4 px-6 rounded-xl sm:rounded-2xl shadow-lg shadow-pink-200 transition-all transform hover:scale-[1.02] text-base sm:text-lg"
+                                    >
+                                        ✨ ตรวจคำตอบ ✨
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col gap-3 sm:gap-4">
+                                    <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                                        <button 
+                                            onClick={prevQuestion}
+                                            className="w-full sm:w-1/2 bg-white hover:bg-pink-50 text-pink-500 border-2 border-pink-200 font-bold py-3 px-4 rounded-xl sm:rounded-2xl transition-all shadow-sm text-base sm:text-lg"
+                                        >
+                                            ⬅️ ย้อนกลับ
+                                        </button>
+                                        <button 
+                                            onClick={nextQuestion}
+                                            className="w-full sm:w-1/2 bg-pink-100 hover:bg-pink-200 text-pink-700 font-bold py-3 px-4 rounded-xl sm:rounded-2xl transition-all shadow-sm text-base sm:text-lg"
+                                        >
+                                            ไปต่อ ➡️
+                                        </button>
+                                    </div>
+                                    <button 
+                                        onClick={retryQuestion}
+                                        className="text-pink-400 hover:text-pink-600 font-bold underline py-2 decoration-2 underline-offset-4 text-sm sm:text-base"
+                                    >
+                                        🔄 ขอทำข้อนี้ใหม่อีกรอบ
+                                    </button>
+                                </div>
+                            )}
+
+                            {answerMode !== 'paper' && (
+                                <>
+                                    <hr className="my-6 sm:my-8 border-pink-100 border-[1px] sm:border-[1.5px]" />
+                                    <button 
+                                        onClick={handleFinishQuiz}
+                                        className={`w-full font-bold py-3 sm:py-4 px-6 rounded-xl sm:rounded-2xl shadow-md transition-all text-base sm:text-lg border-2 ${
+                                            answeredCount === vocabList.length 
+                                            ? 'bg-emerald-400 hover:bg-emerald-500 text-white border-emerald-400 shadow-emerald-200 animate-bounce hover:animate-none' 
+                                            : 'bg-white border-emerald-400 text-emerald-500 hover:bg-emerald-50'
+                                        }`}
+                                    >
+                                        🏁 ส่งคำตอบ / ดูคะแนนรวม 🎀
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                        
+                        {/* Mascot Popup */}
+                        {mascotMessage && (
+                            <div className="fixed bottom-4 right-4 md:bottom-10 md:right-10 z-50 flex items-end gap-1.5 sm:gap-2 mascot-popup pointer-events-none">
+                                <div className="bg-white px-3 py-2 sm:px-4 sm:py-3 rounded-2xl rounded-br-none shadow-xl border-2 border-pink-300 text-pink-600 font-bold text-xs sm:text-sm md:text-base relative max-w-[150px] sm:max-w-[200px]">
+                                    {mascotMessage.text}
+                                    {/* หางลูกโป่งคำพูด */}
+                                    <div className="absolute -bottom-1.5 sm:-bottom-2 right-2 w-3 h-3 sm:w-4 sm:h-4 bg-white border-b-2 border-r-2 border-pink-300 transform rotate-45"></div>
+                                </div>
+                                <div className="text-4xl sm:text-5xl md:text-6xl drop-shadow-lg filter hover:brightness-110 transition-all">
+                                    {mascotMessage.emoji}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            const renderResult = () => {
+                let correctCount = 0;
+                let unansweredCount = 0;
+                let wrongCount = 0;
+
+                if (answerMode === 'system') {
+                    correctCount = resultsList.filter(r => r && r.fullyCorrect).length;
+                    unansweredCount = resultsList.filter(r => r === null).length;
+                    wrongCount = vocabList.length - correctCount - unansweredCount;
+                } else {
+                    correctCount = paperChecks.filter(c => c).length;
+                    wrongCount = vocabList.length - correctCount;
+                }
+                
+                const percentage = Math.round((correctCount / vocabList.length) * 100) || 0;
+                
+                let timeTakenDisplay = '';
+                if (timerMode === 'up') {
+                    timeTakenDisplay = formatTime(currentTime);
+                } else if (timerMode === 'down') {
+                    const usedSeconds = (timeLimitMinutes * 60) - currentTime;
+                    timeTakenDisplay = formatTime(usedSeconds);
+                }
+
+                return (
+                    <div className="max-w-4xl mx-auto p-5 sm:p-6 md:p-8 bg-white/90 backdrop-blur-sm rounded-3xl sm:rounded-[2rem] cute-shadow mt-4 sm:mt-10 border-[3px] border-pink-100">
+                        <div className="text-center mb-8 sm:mb-10">
+                            <h2 className="text-3xl sm:text-4xl font-black text-pink-500 mb-2 sm:mb-3 tracking-wide">
+                                {answerMode === 'paper' ? '📋 เฉลยคำศัพท์ 🌸' : '🎀 สรุปผลคะแนน 🎀'}
+                            </h2>
+                            
+                            {timerMode !== 'none' && (
+                                <div className="inline-block bg-pink-50 border-2 border-pink-200 text-pink-600 font-bold px-4 sm:px-6 py-1.5 sm:py-2 rounded-full mb-3 sm:mb-4 shadow-sm text-sm sm:text-lg">
+                                    ⏱️ ใช้เวลาไปทั้งหมด: {timeTakenDisplay} นาที
+                                </div>
+                            )}
+
+                            {answerMode === 'paper' && (
+                                <p className="text-base sm:text-lg font-bold mt-3 sm:mt-4 mb-4 sm:mb-6 text-pink-400">
+                                    ตรวจคำตอบในกระดาษของคุณ แล้วกดติ๊ก <span className="text-xl sm:text-2xl">⬜</span> ด้านหลังข้อที่ตอบถูกได้เลยน้า 👇
+                                </p>
+                            )}
+
+                            <div className="flex justify-center gap-3 sm:gap-4 md:gap-6 mt-4 sm:mt-6 mb-4 sm:mb-6 flex-wrap">
+                                <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 p-3 sm:p-5 rounded-2xl sm:rounded-[1.5rem] text-center min-w-[100px] sm:min-w-[120px] flex-1 max-w-[140px] sm:max-w-[160px] border-2 border-emerald-200 shadow-sm">
+                                    <div className="text-3xl sm:text-4xl font-black text-emerald-500 drop-shadow-sm">{correctCount}</div>
+                                    <div className="text-xs sm:text-sm text-emerald-700 font-bold mt-1">เก่งมาก! (ถูก)</div>
+                                </div>
+                                <div className="bg-gradient-to-br from-rose-50 to-rose-100 p-3 sm:p-5 rounded-2xl sm:rounded-[1.5rem] text-center min-w-[100px] sm:min-w-[120px] flex-1 max-w-[140px] sm:max-w-[160px] border-2 border-rose-200 shadow-sm">
+                                    <div className="text-3xl sm:text-4xl font-black text-rose-500 drop-shadow-sm">{wrongCount}</div>
+                                    <div className="text-xs sm:text-sm text-rose-700 font-bold mt-1">พลาดไปนิด (ผิด)</div>
+                                </div>
+                                {answerMode === 'system' && (
+                                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-3 sm:p-5 rounded-2xl sm:rounded-[1.5rem] text-center min-w-[100px] sm:min-w-[120px] flex-1 max-w-[140px] sm:max-w-[160px] border-2 border-orange-200 shadow-sm">
+                                        <div className="text-3xl sm:text-4xl font-black text-orange-500 drop-shadow-sm">{unansweredCount}</div>
+                                        <div className="text-xs sm:text-sm text-orange-700 font-bold mt-1">ยังไม่ได้ทำ/ข้าม</div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="mt-6 sm:mt-8 bg-pink-50 p-3 sm:p-4 rounded-2xl inline-block border-2 border-pink-100">
+                                <p className={`text-xl sm:text-2xl font-black ${percentage >= 80 ? 'text-emerald-500' : percentage >= 50 ? 'text-orange-500' : 'text-rose-500'}`}>
+                                    {percentage >= 80 ? '🎉 สุดยอดไปเลย! เก่งสุดๆ 💖' : percentage >= 50 ? '👍 ทำได้ดีมาก พยายามอีกนิดน้า ✨' : '💪 ไม่เป็นไรน้า ค่อยๆ ฝึกฝนเพิ่มเติมนะคะ 🎀'}
+                                </p>
+                                <p className="text-pink-400 font-bold mt-1 text-xs sm:text-sm">ได้คะแนน {percentage}%</p>
+                            </div>
+                        </div>
+
+                        <div className="mb-8 sm:mb-10">
+                            <h3 className="text-xl sm:text-2xl font-black text-pink-600 mb-3 sm:mb-4 border-b-2 border-pink-100 pb-2 sm:pb-3 flex items-center gap-2">
+                                🔍 <span>รายละเอียดคำตอบ</span>
+                            </h3>
+                            <div className="overflow-x-auto custom-scrollbar pb-3 rounded-xl">
+                                <table className="w-full text-left border-collapse min-w-[500px] sm:min-w-[650px]">
+                                    <thead>
+                                        <tr className="bg-pink-100 text-pink-700 text-sm sm:text-base">
+                                            <th className="p-2 sm:p-4 rounded-tl-xl font-bold text-center w-12 sm:w-16">ข้อ</th>
+                                            <th className="p-2 sm:p-4 font-bold border-l-2 border-white">อักษรจีน</th>
+                                            <th className="p-2 sm:p-4 font-bold border-l-2 border-white">พินอิน</th>
+                                            <th className="p-2 sm:p-4 font-bold border-l-2 border-white">คำแปล</th>
+                                            {answerMode === 'paper' ? (
+                                                <th className="p-2 sm:p-4 rounded-tr-xl font-bold text-center w-24 sm:w-32 border-l-2 border-white">✨ ตรวจเอง ✨</th>
+                                            ) : (
+                                                <th className="p-2 sm:p-4 rounded-tr-xl font-bold text-center w-20 sm:w-28 border-l-2 border-white">ผลลัพธ์</th>
+                                            )}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white">
+                                        {vocabList.map((vocab, idx) => {
+                                            const r = resultsList[idx];
+                                            const ans = userAnswersList[idx];
+                                            const isPaperChecked = paperChecks[idx];
+                                            
+                                            let rowClass = 'border-b-2 border-pink-50 hover:bg-pink-50/50 transition-colors';
+                                            let statusIcon = '⬜';
+                                            
+                                            if (answerMode !== 'paper') {
+                                                if (!r) {
+                                                    rowClass += ' bg-orange-50/30';
+                                                    statusIcon = '⏭️'; 
+                                                } else if (r.fullyCorrect) {
+                                                    rowClass += ' bg-emerald-50/30';
+                                                    statusIcon = '✅';
+                                                } else {
+                                                    rowClass += ' bg-rose-50/30';
+                                                    statusIcon = '❌';
+                                                }
+                                            } else {
+                                                if (isPaperChecked) {
+                                                    rowClass += ' bg-emerald-50/50 transition-colors duration-300';
+                                                }
+                                            }
+
+                                            return (
+                                                <tr key={idx} className={rowClass}>
+                                                    <td className="p-2 sm:p-4 text-center font-bold text-pink-300 text-sm sm:text-base">{idx + 1}</td>
+                                                    <td className={`p-2 sm:p-4 border-l-2 border-pink-50 ${displaySettings.hanzi ? 'font-bold bg-pink-50/50 text-gray-800' : 'text-gray-600'}`}>
+                                                        <div className="flex justify-between items-center gap-1 sm:gap-2 flex-col sm:flex-row items-start sm:items-center">
+                                                            <span className={answerMode === 'paper' && !displaySettings.hanzi ? 'text-emerald-600 font-bold text-base sm:text-lg' : 'text-base sm:text-lg'}>{vocab.hanzi}</span>
+                                                            <button onClick={() => playAudio(vocab.hanzi, 'zh-CN')} className="text-[10px] sm:text-xs bg-pink-50 border border-pink-200 text-pink-500 rounded-full px-1.5 py-0.5 sm:px-2 sm:py-1 hover:bg-pink-100 shadow-sm transition-transform hover:scale-105 mt-1 sm:mt-0" title="ฟังเสียงจีน">💖</button>
+                                                        </div>
+                                                        {answerMode !== 'paper' && !displaySettings.hanzi && r && !r.fieldResults.hanzi && (
+                                                            <div className="text-xs sm:text-sm text-rose-500 mt-1 line-through opacity-80 font-medium">{ans.hanzi || '(ไม่ได้ตอบ)'}</div>
+                                                        )}
+                                                        {answerMode !== 'paper' && !displaySettings.hanzi && !r && ans.hanzi && (
+                                                            <div className="text-xs sm:text-sm text-orange-400 mt-1 font-medium">ค้างไว้: {ans.hanzi}</div>
+                                                        )}
+                                                    </td>
+                                                    <td className={`p-2 sm:p-4 border-l-2 border-pink-50 ${displaySettings.pinyin ? 'font-bold bg-pink-50/50 text-gray-800' : 'text-gray-600'}`}>
+                                                        <span className={answerMode === 'paper' && !displaySettings.pinyin ? 'text-emerald-600 font-bold text-base sm:text-lg' : 'text-base sm:text-lg'}>{vocab.pinyin}</span>
+                                                        {answerMode !== 'paper' && !displaySettings.pinyin && r && !r.fieldResults.pinyin && (
+                                                            <div className="text-xs sm:text-sm text-rose-500 mt-1 line-through opacity-80 font-medium">{ans.pinyin || '(ไม่ได้ตอบ)'}</div>
+                                                        )}
+                                                        {answerMode !== 'paper' && !displaySettings.pinyin && !r && ans.pinyin && (
+                                                            <div className="text-xs sm:text-sm text-orange-400 mt-1 font-medium">ค้างไว้: {ans.pinyin}</div>
+                                                        )}
+                                                    </td>
+                                                    <td className={`p-2 sm:p-4 border-l-2 border-pink-50 ${displaySettings.meaning ? 'font-bold bg-pink-50/50 text-gray-800' : 'text-gray-600'}`}>
+                                                        <div className="flex justify-between items-center gap-1 sm:gap-2 flex-col sm:flex-row items-start sm:items-center">
+                                                            <span className={answerMode === 'paper' && !displaySettings.meaning ? 'text-emerald-600 font-bold text-base sm:text-lg' : 'text-base sm:text-lg'}>{vocab.meaning}</span>
+                                                            <button onClick={() => playAudio(vocab.meaning, 'en-US')} className="text-[10px] sm:text-xs bg-purple-50 border border-purple-200 text-purple-500 rounded-full px-1.5 py-0.5 sm:px-2 sm:py-1 hover:bg-purple-100 shadow-sm transition-transform hover:scale-105 mt-1 sm:mt-0" title="ฟังเสียงอังกฤษ">✨</button>
+                                                        </div>
+                                                        {answerMode !== 'paper' && !displaySettings.meaning && r && !r.fieldResults.meaning && (
+                                                            <div className="text-xs sm:text-sm text-rose-500 mt-1 line-through opacity-80 font-medium">{ans.meaning || '(ไม่ได้ตอบ)'}</div>
+                                                        )}
+                                                        {answerMode !== 'paper' && !displaySettings.meaning && !r && ans.meaning && (
+                                                            <div className="text-xs sm:text-sm text-orange-400 mt-1 font-medium">ค้างไว้: {ans.meaning}</div>
+                                                        )}
+                                                    </td>
+                                                    {answerMode === 'paper' ? (
+                                                        <td 
+                                                            className="p-2 sm:p-4 border-l-2 border-pink-50 text-center cursor-pointer hover:bg-emerald-50/50 transition-colors group"
+                                                            onClick={() => togglePaperCheck(idx)}
+                                                            title="คลิกเพื่อทำเครื่องหมายว่าตอบถูก"
+                                                        >
+                                                            <button 
+                                                                className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center text-lg sm:text-2xl mx-auto transition-all duration-300 ${isPaperChecked ? 'bg-emerald-400 text-white shadow-lg shadow-emerald-200 scale-110 rotate-12' : 'bg-gray-50 text-gray-300 border-2 border-gray-200 group-hover:border-emerald-300 group-hover:text-emerald-200'}`}
+                                                            >
+                                                                {isPaperChecked ? '✅' : '✔'}
+                                                            </button>
+                                                        </td>
+                                                    ) : (
+                                                        <td className="p-2 sm:p-4 border-l-2 border-pink-50 text-center text-xl sm:text-2xl">
+                                                            {statusIcon}
+                                                        </td>
+                                                    )}
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mt-6 sm:mt-8">
+                            <button 
+                                onClick={() => setMode('quiz')}
+                                className="w-full sm:w-1/3 bg-white border-2 border-pink-300 text-pink-500 hover:bg-pink-50 font-bold py-3 sm:py-4 px-4 sm:px-6 rounded-xl sm:rounded-2xl transition-all shadow-sm text-base sm:text-lg"
+                            >
+                                ⬅️ กลับไปดูโจทย์
+                            </button>
+                            <button 
+                                onClick={restart}
+                                className="w-full sm:w-2/3 bg-pink-500 hover:bg-pink-600 text-white font-bold py-3 sm:py-4 px-4 sm:px-6 rounded-xl sm:rounded-2xl transition-all shadow-lg shadow-pink-200 hover:-translate-y-1 text-base sm:text-lg"
+                            >
+                                🔄 กลับไปตั้งค่าเริ่มใหม่ 🎀
+                            </button>
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="min-h-screen pb-16 pt-4 px-3 sm:px-6">
+                    {mode === 'setup' && renderSetup()}
+                    {mode === 'quiz' && renderQuiz()}
+                    {mode === 'result' && renderResult()}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
